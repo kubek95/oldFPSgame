@@ -1,1 +1,1 @@
-Simple old-school FSP game based on Dimitry Sokolov's tinyRayCaster project
+Simple old-school FPS game based on Dimitri Sokolov's tinyRayCaster project
