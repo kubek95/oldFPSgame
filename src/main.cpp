@@ -30,7 +30,7 @@ struct Player
     std::size_t x;
     std::size_t y;
     std::size_t size{5};
-    float sightDirection {PI*0.45f};
+    float sightDirection {PI*0.3f};
 };
 
 struct Vertex
@@ -99,6 +99,19 @@ auto drawRay(std::vector<Pixel>& frameBuffer, Player& player, std::array<const c
        frameBuffer.at(frameBufferIndex) = Pixel{255, 255, 255, 255};
    }
 }
+
+auto drawFieldOfView(std::vector<Pixel>& frameBuffer, Player& player, std::array<const char, 257>& map) -> void
+{
+    constexpr int numberOfRays{512};
+    constexpr float fieldOfView{3.14f*0.3f};
+    constexpr float degreeBetweenRays{fieldOfView/numberOfRays};
+    Player tempPlayer = player;
+    for (unsigned int i{0}; i < numberOfRays; ++i) {
+        tempPlayer.sightDirection += degreeBetweenRays;
+        drawRay(frameBuffer, tempPlayer, map);
+    }
+}
+
 auto save_pixelmap(const std::vector<Pixel>& pixelMap,
                    const std::string& path,
                    std::size_t width,
@@ -168,9 +181,10 @@ int main()
 //    for (const auto& el: walls) {
 //        drawRectangle(framebuffer, el.first, el.second);
 //    }
-    Player player{50, 55};
+    Player player{160, 55};
     drawRectangle(framebuffer, {player.x, player.y}, {player.x+player.size, player.y+player.size});
-    drawRay(framebuffer, player, map);
+//    drawRay(framebuffer, player, map);
+    drawFieldOfView(framebuffer, player, map);
     save_pixelmap(framebuffer, "./out.ppm", width, height);
     std::cout << "hello from the other side\n";
     return 0;
