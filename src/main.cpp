@@ -30,7 +30,7 @@ struct Player
     std::size_t x;
     std::size_t y;
     std::size_t size{5};
-    float sightDirection {PI*0.3f};
+    float sightDirection {PI*0.35f};
 };
 
 struct Vertex
@@ -50,17 +50,25 @@ auto indexToCoord(std::size_t index, std::size_t width) -> std::pair<std::size_t
     return {index % width, index / width};
 }
 
-auto drawRectangle(std::vector<Pixel>& framebuffer, const Vertex& leftUpperVertex, const Vertex& rightLowerVertex) -> void
+auto drawRectangle(std::vector<Pixel>& framebuffer, const Vertex& leftUpperVertex, const Vertex& rightLowerVertex, bool firstHalf = true) -> void
 {
-    Pixel white{255, 255, 255, 255};
+    Pixel white{0, 255, 255, 255};
     assert(leftUpperVertex.x <= rightLowerVertex.x);
     assert(leftUpperVertex.y <= rightLowerVertex.y);
     
     auto numberOfLines = rightLowerVertex.y - leftUpperVertex.y;
     auto widthOfLine = rightLowerVertex.x - leftUpperVertex.x;
+    if (leftUpperVertex.x == rightLowerVertex.x) widthOfLine = 1;
     for(std::size_t i = 0; i < numberOfLines; ++i) {
         for(std::size_t j = 0; j < widthOfLine; ++j) {
-            framebuffer.at(coordToIndex(j+leftUpperVertex.x, i+leftUpperVertex.y, 512)) = white;
+            auto index = coordToIndex(j+leftUpperVertex.x, i+leftUpperVertex.y, 512);
+            const auto lineNumber{(i+leftUpperVertex.y)};
+            if (firstHalf) {
+                index += lineNumber*512;
+            } else {
+                index += (lineNumber+1)*512;
+            }
+            framebuffer.at(index) = white;
         }
     }
 }
@@ -72,7 +80,7 @@ auto drawMap(std::vector<Pixel>& frameBuffer, const std::array<const char, 257>&
             auto [upperLeftX, upperLeftY] = indexToCoord(i, 16);
             upperLeftX *= 32;
             upperLeftY *= 32;
-            std::cout << i << "(" << upperLeftX << "," << upperLeftY << ")\n";
+            //std::cout << i << "(" << upperLeftX << "," << upperLeftY << ")\n";
             drawRectangle(frameBuffer, {upperLeftX, upperLeftY}, {upperLeftX+32, upperLeftY+32});
         }
     }
@@ -86,18 +94,33 @@ auto isCollision(const Vertex& vertex, const std::array<const char, 257>& map) -
     return map.at(mapIndex) != ' ';
 }
 
-auto drawRay(std::vector<Pixel>& frameBuffer, Player& player, std::array<const char, 257>& map) -> void
+auto translateIndexToLeftSidePicture(std::size_t index, std::size_t y_coord) -> std::size_t
 {
-   float c{0};
-   for (; c<512; c+=2.f) {
+    return index + (512*y_coord);
+}
+
+auto draw3dWall(std::vector<Pixel>& frameBuffer, float distanceToWall, std::size_t xCoord) -> void
+{
+//    std::cout << "distance to wall from camera: " << distanceToWall << '\n';
+    const auto wallHeight{static_cast<std::size_t>((10000/distanceToWall))};
+    std::size_t yCoord{(512 - static_cast<std::size_t>(wallHeight))/2};
+    std::cout << "wall height: " << wallHeight << '\n';
+    drawRectangle(frameBuffer, {xCoord, yCoord}, {xCoord, yCoord+wallHeight}, false);
+}
+
+auto drawRay(std::vector<Pixel>& frameBuffer, Player& player, std::array<const char, 257>& map) -> float
+{
+    float c{0};
+    for (; c<512; c+=2.f) {
        std::size_t x = static_cast<std::size_t>(std::cos(player.sightDirection)*c + float(player.x));
        std::size_t y = static_cast<std::size_t>(std::sin(player.sightDirection)*c + float(player.y));
        if (isCollision({x, y}, map)) {
            break;
        }
        const auto frameBufferIndex = coordToIndex(x, y, 512);
-       frameBuffer.at(frameBufferIndex) = Pixel{255, 255, 255, 255};
+       frameBuffer.at(translateIndexToLeftSidePicture(frameBufferIndex, y)) = Pixel{0, 255, 255, 255};
    }
+    return c;
 }
 
 auto drawFieldOfView(std::vector<Pixel>& frameBuffer, Player& player, std::array<const char, 257>& map) -> void
@@ -108,8 +131,24 @@ auto drawFieldOfView(std::vector<Pixel>& frameBuffer, Player& player, std::array
     Player tempPlayer = player;
     for (unsigned int i{0}; i < numberOfRays; ++i) {
         tempPlayer.sightDirection += degreeBetweenRays;
-        drawRay(frameBuffer, tempPlayer, map);
+        auto distance = drawRay(frameBuffer, tempPlayer, map);
+        draw3dWall(frameBuffer, distance, i);
     }
+}
+
+auto initlializeFramebuffer(std::size_t w_height, std::size_t w_width, Pixel color) -> std::vector<Pixel>
+{
+    return std::vector<Pixel>{w_height*w_width, color};
+//    for (std::size_t x = 0; x < w_width; ++x) {
+//        for (std::size_t y = 0; y < w_height; ++y) {
+//            std::uint8_t r = static_cast<std::uint8_t>(float(255*x)/float(w_width));
+//            std::uint8_t g = static_cast<std::uint8_t>(float(255*y)/float(w_height));
+//            std::uint8_t b = 0;
+//            std::uint8_t a = 255;
+//            Pixel p{r, g, b, a};
+//            frameBuffer.push_back(p);
+//        }
+//    }
 }
 
 auto save_pixelmap(const std::vector<Pixel>& pixelMap,
@@ -128,19 +167,10 @@ auto save_pixelmap(const std::vector<Pixel>& pixelMap,
 
 int main()
 {
-    constexpr std::size_t height = 512;
-    constexpr std::size_t width = 512;
-    std::vector<Pixel> framebuffer;
-    for (std::size_t x = 0; x < width; ++x) {
-        for (std::size_t y = 0; y < height; ++y) {
-            std::uint8_t r = static_cast<std::uint8_t>(float(255*x)/float(width));
-            std::uint8_t g = static_cast<std::uint8_t>(float(255*y)/float(height));
-            std::uint8_t b = 0;
-            std::uint8_t a = 255;
-            Pixel p{r, g, b, a};
-            framebuffer.push_back(p);
-        }
-    }
+    constexpr std::size_t w_height = 512;
+    constexpr std::size_t w_width = 1024;
+    Pixel backgroundColor{255, 255, 255, 255};
+    auto framebuffer = initlializeFramebuffer(w_height, w_width, backgroundColor);
 
     constexpr std::size_t numOfVerticalBlocks{16};
     constexpr std::size_t numOfHorizontBlocks{16};
@@ -157,35 +187,16 @@ int main()
         "1   1   1      1"\
         "1   1   1      1"\
         "1   1   1111   1"\
-        "1       1      1"\
+        "11      1      1"\
         "1       1  11111"\
         "1  111111      1"\
         "1              1"\
         "1111111111111111"
     };
     drawMap(framebuffer, map);
-//    std::vector<std::pair<Vertex, Vertex>> walls;
-//    walls.emplace_back(Vertex{0,0}, Vertex{512,20});
-//    walls.emplace_back(Vertex{0,20}, Vertex{20,512});
-//    walls.emplace_back(Vertex{492,20}, Vertex{512,512});
-//    walls.emplace_back(Vertex{20,492}, Vertex{492,512});
-//    walls.emplace_back(Vertex{200,70}, Vertex{362,90});
-//    walls.emplace_back(Vertex{180,90}, Vertex{200,200});
-//    walls.emplace_back(Vertex{270,135}, Vertex{492,155});
-//    walls.emplace_back(Vertex{130,200}, Vertex{270,220});
-//    walls.emplace_back(Vertex{130,220}, Vertex{150,270});
-//    walls.emplace_back(Vertex{250,220}, Vertex{270,420});
-//    walls.emplace_back(Vertex{70,420}, Vertex{270,440});
-//    walls.emplace_back(Vertex{270,270}, Vertex{380,290});
-//    walls.emplace_back(Vertex{360,350}, Vertex{492,370});
-//    for (const auto& el: walls) {
-//        drawRectangle(framebuffer, el.first, el.second);
-//    }
     Player player{160, 55};
     drawRectangle(framebuffer, {player.x, player.y}, {player.x+player.size, player.y+player.size});
-//    drawRay(framebuffer, player, map);
     drawFieldOfView(framebuffer, player, map);
-    save_pixelmap(framebuffer, "./out.ppm", width, height);
-    std::cout << "hello from the other side\n";
+    save_pixelmap(framebuffer, "./out.ppm", w_width, w_height);
     return 0;
 }
